@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         D2L Quiz Grader (Partial Credit Utility)
-// @namespace    http://tampermonkey.net/
+// @namespace    http://gabetardy.github.io/Misc/
 // @version      0.0.1a
 // @description  This portion of the script provides a utility which caches shadow DOM elements (of which D2L is rife) and then allows you to input a grade via code. In the future, it will load grades from a CSV file and apply them automatically.
 // @author       Gabriel Tardy
