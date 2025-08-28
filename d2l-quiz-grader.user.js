@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         D2L Quiz Grader (Partial Credit Utility)
 // @namespace    http://gabetardy.github.io/Misc/
-// @version      0.0.1a
+// @version      0.0.2a
 // @description  This portion of the script provides a utility which caches shadow DOM elements (of which D2L is rife) and then allows you to input a grade via code. In the future, it will load grades from a CSV file and apply them automatically.
 // @author       Gabriel Tardy
 // @match        https://*/d2l/le/activities/evaluation/actor/*
@@ -56,8 +56,11 @@
                 return path.join(' > ');
             }
     
-            _traverse(root) {
+            _traverse(root, startingIndex = 0) {
                 let nodes = root.querySelectorAll('*');
+
+                // Gabe: Track index for a future optimization: if this object is known, then the position in the ordered list can be immediately accessed since this property is immutable in the cache unless the entire cache is rebuilt, in which case the index is reset anyway.
+                let ownIndex = startingIndex;
                 nodes.forEach(el => {
                     let selector = this._getComposedSelector(el);
                     let rect = el.getBoundingClientRect();
@@ -69,15 +72,23 @@
                             left: rect.left,
                             width: rect.width,
                             height: rect.height
-                        }
+                        },
+                        index: ownIndex
                     };
                     this.cache.set(selector, entry);
                     this.ordered.push(entry);
     
                     if (el.shadowRoot) {
-                        this._traverse(el.shadowRoot);
+                        // Gabe: start the index from this current index + 1, then set the index in the host traversal to the return of the child traversal to preserve ordering.
+                        ownIndex = this._traverse(el.shadowRoot, ownIndex + 1);
+                    } else {
+                        // Gabe: Increment own index
+                        ownIndex++;
                     }
                 });
+
+                // Gabe: Return own index so that recursive calls to this function can continue indexing based on the global index.
+                return ownIndex;
             }
     
             buildCache() {
@@ -197,6 +208,11 @@
             this.problems = SD.findByTag("d2l-consistent-evaluation-quizzing-section");
         }
 
+        // Get current evaluated student's name. Assumes two-name names (First Last), returning ["First", "Last"]. If no name found, returns ["Unknown", "Student"].
+        getCurrentStudentName() {
+            return SD.findByClass("d2l-consistent-evaluation-lcb-user-name")[0]?.element.title.split(" ") || ["Unknown", "Student"];
+        }
+
         // Return a specific problem header by section.
         // There are two d2l-consistent-evaluation-quizzing-section elements per problem, so we multiply the problem number by 2 and subtract 1 to get the correct index (the starting section in the grading view).
         getProblem(num) {
@@ -231,6 +247,18 @@
             return steps[num-1]
         }
 
+        getGradeByStep(step) {
+            // If the step is the header for each "question", the first input is the grade input, and the second input is the feedback.
+            var inputObject = SD.findChildrenByTag(step, "input")[0];
+    
+            if (!inputObject) {
+                console.error("No grade input found for step:", step);
+                return;
+            }
+    
+            return inputObject.element.value; 
+        }
+
         setGradeByStep(step, gradeFloat) {
             // If the step is the header for each "question", the first input is the grade input, and the second input is the feedback.
             var inputObject = SD.findChildrenByTag(step, "input")[0];
@@ -260,6 +288,28 @@
         }
 
         // Example: TGrader.setGrade(2,1,2);
+        getGrade(problemNum, stepNum) {
+            var problem = this.getProblem(problemNum);
+            if (!problem) {
+                console.error("Problem not found:", problemNum);
+                return;
+            }
+    
+            var steps = this.getSteps(problem);
+            if (steps.length < stepNum) {
+                console.error("Requested step number exceeds remaining total steps.");
+                return;
+            }
+    
+            var step = this.getStep(steps, stepNum);
+            if (!step) {
+                console.error("Step ", stepNum, " not found.");
+                return;
+            }
+            this.getGradeByStep(step);
+        }
+
+        // Example: TGrader.setGrade(2,1,2);
         setGrade(problemNum, stepNum, gradeFloat) {
             var problem = this.getProblem(problemNum);
             if (!problem) {
@@ -279,6 +329,56 @@
                 return;
             }
             this.setGradeByStep(step, gradeFloat);
+        }
+
+        getGrades() {
+            var currentProblemNum = 1;
+            var currentProblem = this.getProblem(currentProblemNum);
+            var nextProblem = this.getProblem(currentProblemNum+1) || {index: Infinity};
+            var currentProblemStepNumberOffset = 0;
+            // Get steps for the first problem (i.e. every step in the entire quiz)
+            var steps = this.getSteps(currentProblem);
+            var grades = [[]]; // initialize with one empty array for the first problem
+
+            console.log(`--- Problem 1 ---`);
+            // step numbering is 1-indexed
+            for (let globalStepNumber = 1; globalStepNumber <= steps.length; globalStepNumber++) {
+                var step = this.getStep(steps, globalStepNumber);
+                if (!step) {
+                    console.error("Step ", globalStepNumber, " not found.");
+                    return;
+                }
+    
+                // if we're beyond the current problem's dom index, we must be in the next problem
+                if (step.index > nextProblem.index && nextProblem.index !== Infinity) {
+                    currentProblemNum++;
+                    currentProblem = nextProblem;
+                    nextProblem = currentProblemNum+1 <= this.problems.length/2 ? this.getProblem(currentProblemNum+1) : {index: Infinity};
+                    currentProblemStepNumberOffset = globalStepNumber - 1;
+                    console.log(`--- Problem ${currentProblemNum} ---`);
+
+                    // make sure new problem has a grades array
+                    grades.push([]);
+                }
+
+                var grade = +this.getGradeByStep(step); // noticed that this was not a number for some reason so force it to be a number because I want it to be
+                console.log(`Problem ${currentProblemNum}, Step ${globalStepNumber - currentProblemStepNumberOffset}: Grade = ${grade}`);
+
+                // actually add to the grades array
+                grades[currentProblemNum-1].push(grade)
+            }
+
+            return grades;
+        }
+
+        // The fact that future problems' substeps are included in each problem's step list has transcended being a bug and is now a feature.
+        // This allows us to completely flatten the grades into grades for each step and assign them all in one go.
+        setGrades(gradeArray){
+            var gradesFlattened = gradeArray.flat();
+            for(var i = 0; i < gradesFlattened.length; i++){
+                var grade = gradesFlattened[i];
+                this.setGrade(1, i+1, grade);
+            }
         }
     }
 

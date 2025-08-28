@@ -9,13 +9,24 @@ D2L does not natively provide a system for multi-part arithmetic questions and a
 
 There are even more requests on the PIE forum (D8351, D6350, D6891, etc.), which are not available to the public.
 
-Therefore, this joint Tampermonkey/Maple script intends to solve both issues for my D2L course by outsourcing validation to an external script created in Maple, which has basically every mathematical operation known to man, whose results are then injected into the D2L grading view by Tampermonkey. This script will recalculate subsequent problem parts incorporating student errors to determine whether they followed proper procedure or not, assigning reasonable partial credit as it goes.
+Therefore, this joint Tampermonkey/Maple script intends to solve both issues for my D2L course by outsourcing validation to an external script created in Maple, which has basically every mathematical operation known to man, whose results are then injected into the D2L grading view by Tampermonkey using an imported JSON file. This script will recalculate subsequent problem parts incorporating student errors to determine whether they followed proper procedure or not, assigning reasonable partial credit as it goes. (Flowchart forthcoming.)
 
 D2L obfuscates much of its internals (and probably simplfies its own development internally) via extensive use of Shadow DOM, which makes injection of this kind extremely difficult. Therefore, the userscript also contains a caching system which flattens the Shadow DOM for simplified searching.
 
-## Current Features
-- d2l.user.js
-  - Assign grades to question parts in the quiz grade view via an exposed JS grade manager
+**This script is not intended to be a permanent solution to these issues, as I hope that D2L improves their arithmetic quizzes in a future roadmap. Please do not stop asking for these changes to be made.**
+
+## Current Features and Changelog
+- **v0.0.2a**
+  - d2l.user.js
+    - **Major cornerstone feature: Bulk assign all grades in currently evaluated quiz at once based on input array of problem/subproblem grades: `TGrader.setGrades(gradeArray)`**
+    - Implemented getters for currently-assigned grade for student by problem and subproblem
+      - Individual grade: `TGrader.getGrade(problemNumber, subpartNumber, gradeFloat)`
+      - Bulk grades: `TGrader.getGrades()`
+    - Implemented student name getter: `TGrader.getCurrentStudentName()`
+    - Known issue: grade input locations are not cached, so this might be slow for large quizzes. I tested this on a quiz with 12 questions.
+- **v0.0.1a**
+  - Created d2l.user.js
+    - Assign grades to question parts in the quiz grade view via an exposed JS grade manager
 
 ## Planned Features
 - Generate problem steps and automatically calculate student mistake locations in a corresponding Maple script
