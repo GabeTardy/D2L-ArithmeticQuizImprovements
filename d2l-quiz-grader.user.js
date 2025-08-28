@@ -377,7 +377,11 @@
             var gradesFlattened = gradeArray.flat();
             for(var i = 0; i < gradesFlattened.length; i++){
                 var grade = gradesFlattened[i];
-                this.setGrade(1, i+1, grade);
+
+                // Skip grades listed as -1 (indicating no change)
+                if(grade > 0){
+                    this.setGrade(1, i+1, grade);
+                }
             }
         }
     }
