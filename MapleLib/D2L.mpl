@@ -1,13 +1,15 @@
 D2L := module()
 description "Tools for importing and processing D2L quiz data";
 option package;
-export ImportAttemptData, ImportQuiz, ChangeUnits, NoUnits, SetQuizDir, PrettifiedQuiz, SimulateQuestion;
+export ImportAttemptData, ImportQuiz, ChangeUnits, NoUnits, SetQuizDir, PrettifiedQuiz, SimulateQuiz, SimulateQuestion;
 
     # Options
-    local QuizDir, CurrentQuizName, CurrentQuizData;
+    local QuizDir, CurrentQuizName, CurrentQuizData, nQuestions;
     QuizDir := "Quizzes/";
     CurrentQuizName := "";
     CurrentQuizData := table();
+
+    nQuestions := 0;
 
     # --- Option getter/setter utilities ---
     SetQuizDir := proc(dirPath::string)
@@ -82,6 +84,7 @@ export ImportAttemptData, ImportQuiz, ChangeUnits, NoUnits, SetQuizDir, Prettifi
     ImportQuiz := proc(quizName):
         CurrentQuizName := quizName:
         CurrentQuizData := JSON:-ParseFile(cat(QuizDir, CurrentQuizName, ".json"), output=table);
+        nQuestions := nops(CurrentQuizData["questions"]);
         return copy(CurrentQuizData, 'deep');
     end proc:
 
@@ -91,8 +94,30 @@ export ImportAttemptData, ImportQuiz, ChangeUnits, NoUnits, SetQuizDir, Prettifi
     end proc:
 
     # --- Utilities for quiz administration ---
+    SimulateQuiz := proc():
+        local i;
+
+        for i from 1 to nQuestions by 1 do:
+            SimulateQuestion(i);
+        end do;
+    end proc:
+
     SimulateQuestion := proc(id::integer):
-        error "Not implemented yet";
+        local currentQuestion, given;
+
+        currentQuestion := CurrentQuizData["questions"][id];
+
+        # Assign givens
+        for i from 1 to nops(currentQuestion["given"]) do:
+            if currentQuestion["type"] = "MapleValidatedQuestion" then
+            given := currentQuestion["given"][i];
+            parse(given, statement);
+            fi:
+        end do:
+
+        # Evaluate problem parts
+
+        #error "Not implemented yet";
     end proc:
 
     # --- Utilities for question processing ---
